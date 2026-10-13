@@ -19,9 +19,11 @@ const RECIPES = [
 interface Props {
   onOpenCamera: () => void;
   onOpenRecipe: (recipe: (typeof RECIPES)[0]) => void;
+  onOpenType: () => void;
+  onOpenSaved: () => void;
 }
 
-export default function HomeScreen({ onOpenCamera, onOpenRecipe }: Props) {
+export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onOpenSaved }: Props) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const c = isDark ? Colors.dark : Colors.light;
@@ -55,8 +57,8 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe }: Props) {
       <View style={styles.tiles}>
         {[
           { label: 'Scan', emoji: '📷', action: onOpenCamera },
-          { label: 'Type', emoji: '✏️', action: () => {} },
-          { label: 'Saved', emoji: '🔖', action: () => {} },
+          { label: 'Type', emoji: '✏️', action: onOpenType },
+          { label: 'Saved', emoji: '🔖', action: onOpenSaved },
         ].map(tile => (
           <TouchableOpacity
             key={tile.label}
