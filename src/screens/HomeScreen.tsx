@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,30 @@ import {
   useColorScheme,
 } from 'react-native';
 import { Colors, Spacing, Radius } from '../constants';
+import { ALL_RECIPES, Recipe } from '../data/recipes';
 
-const RECIPES = [
-  { id: '1', name: 'Pasta Primavera', time: '25 min', difficulty: 'Easy', match: 94, emoji: '🍝' },
-  { id: '2', name: 'Stir-fry Noodles', time: '20 min', difficulty: 'Easy', match: 87, emoji: '🍜' },
-  { id: '3', name: 'Vegetable Curry', time: '35 min', difficulty: 'Medium', match: 82, emoji: '🍛' },
-  { id: '4', name: 'Omelette Florentine', time: '15 min', difficulty: 'Easy', match: 79, emoji: '🍳' },
-];
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning,';
+  if (h < 17) return 'Good afternoon,';
+  return 'Good evening,';
+}
 
 interface Props {
   onOpenCamera: () => void;
-  onOpenRecipe: (recipe: (typeof RECIPES)[0]) => void;
+  onOpenRecipe: (recipe: Recipe) => void;
   onOpenType: () => void;
   onOpenSaved: () => void;
+  savedIds: string[];
 }
 
-export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onOpenSaved }: Props) {
+export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onOpenSaved, savedIds }: Props) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const c = isDark ? Colors.dark : Colors.light;
+
+  // Show top 4 recipes by default on home
+  const suggestions = ALL_RECIPES.slice(0, 4);
 
   return (
     <ScrollView
@@ -35,7 +40,7 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onO
     >
       {/* Greeting */}
       <View style={styles.greeting}>
-        <Text style={[styles.greetingSub, { color: c.text2 }]}>Good evening,</Text>
+        <Text style={[styles.greetingSub, { color: c.text2 }]}>{getGreeting()}</Text>
         <Text style={[styles.greetingName, { color: c.text }]}>Bidhusha 👋</Text>
       </View>
 
@@ -58,7 +63,7 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onO
         {[
           { label: 'Scan', emoji: '📷', action: onOpenCamera },
           { label: 'Type', emoji: '✏️', action: onOpenType },
-          { label: 'Saved', emoji: '🔖', action: onOpenSaved },
+          { label: 'Saved', emoji: '🔖', action: onOpenSaved, badge: savedIds.length },
         ].map(tile => (
           <TouchableOpacity
             key={tile.label}
@@ -66,7 +71,14 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onO
             onPress={tile.action}
             activeOpacity={0.8}
           >
-            <Text style={styles.tileEmoji}>{tile.emoji}</Text>
+            <View style={styles.tileEmojiWrap}>
+              <Text style={styles.tileEmoji}>{tile.emoji}</Text>
+              {!!tile.badge && tile.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{tile.badge}</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.tileLabel, { color: c.text2 }]}>{tile.label}</Text>
           </TouchableOpacity>
         ))}
@@ -76,7 +88,7 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onO
       <Text style={[styles.sectionLabel, { color: c.text3, marginTop: 8 }]}>
         Suggested for you
       </Text>
-      {RECIPES.map(recipe => (
+      {suggestions.map(recipe => (
         <TouchableOpacity
           key={recipe.id}
           style={[styles.recipeCard, { backgroundColor: c.surface, borderColor: c.border }]}
@@ -92,11 +104,13 @@ export default function HomeScreen({ onOpenCamera, onOpenRecipe, onOpenType, onO
               <Text style={[styles.recipeMetaText, { color: c.text3 }]}>{recipe.time}</Text>
               <Text style={[styles.recipeMetaText, { color: c.text3 }]}>·</Text>
               <Text style={[styles.recipeMetaText, { color: c.text3 }]}>{recipe.difficulty}</Text>
+              <Text style={[styles.recipeMetaText, { color: c.text3 }]}>·</Text>
+              <Text style={[styles.recipeMetaText, { color: c.text3 }]}>Serves {recipe.serves}</Text>
             </View>
           </View>
-          <View style={[styles.matchBadge, { backgroundColor: Colors.crumb + '20' }]}>
-            <Text style={[styles.matchText, { color: Colors.crumb }]}>{recipe.match}%</Text>
-          </View>
+          {savedIds.includes(recipe.id) && (
+            <Text style={{ fontSize: 16 }}>🔖</Text>
+          )}
         </TouchableOpacity>
       ))}
 
@@ -161,7 +175,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
+  tileEmojiWrap: { position: 'relative' },
   tileEmoji: { fontSize: 24 },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: Colors.crumb,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   tileLabel: { fontSize: 12, fontWeight: '500' },
 
   recipeCard: {
@@ -184,10 +212,4 @@ const styles = StyleSheet.create({
   recipeName: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
   recipeMeta: { flexDirection: 'row', gap: 6 },
   recipeMetaText: { fontSize: 12 },
-  matchBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
-  },
-  matchText: { fontSize: 12, fontWeight: '700' },
 });

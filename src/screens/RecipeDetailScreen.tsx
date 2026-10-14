@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,74 +9,60 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Radius } from '../constants';
+import { Recipe } from '../data/recipes';
 
-export interface Recipe {
-  id: string;
-  name: string;
-  time: string;
-  difficulty: string;
-  match: number;
-  emoji: string;
-}
+// Re-export Recipe so App.tsx can import it from here (backwards compat)
+export type { Recipe };
 
 interface Props {
   recipe: Recipe;
   onBack: () => void;
-  onSave?: () => void;
+  isSaved: boolean;
+  onToggleSave: () => void;
+  /** Ingredients the user has — highlighted in the list */
+  userIngredients?: string[];
 }
 
-const STEPS: Record<string, string[]> = {
-  '1': [
-    'Boil salted water and cook pasta until al dente.',
-    'Sauté garlic and onion in olive oil until softened.',
-    'Add chopped tomatoes and cook for 5 minutes.',
-    'Toss pasta with the sauce, add butter and cheese.',
-    'Season with salt and pepper. Serve immediately.',
-  ],
-  '2': [
-    'Cook noodles according to package instructions.',
-    'Stir-fry onion and garlic in a hot wok with oil.',
-    'Add vegetables and toss for 2–3 minutes.',
-    'Add noodles, soy sauce, and toss everything together.',
-    'Finish with a drizzle of sesame oil.',
-  ],
-  '3': [
-    'Heat oil in a pan and fry onion until golden.',
-    'Add garlic, tomatoes and curry paste. Cook 3 min.',
-    'Add vegetables and pour in coconut milk.',
-    'Simmer for 20 minutes until vegetables are tender.',
-    'Serve with rice and fresh coriander.',
-  ],
-  '4': [
-    'Whisk eggs with a pinch of salt.',
-    'Melt butter in a non-stick pan over medium heat.',
-    'Pour in eggs and stir gently until just set.',
-    'Add cheese and fold the omelette in half.',
-    'Slide onto a plate and serve immediately.',
-  ],
-};
+function normalise(s: string) {
+  return s.toLowerCase().trim();
+}
 
-const DEFAULT_STEPS = [
-  'Gather all your ingredients.',
-  'Prepare and chop everything as needed.',
-  'Cook following the recipe method.',
-  'Season to taste and serve hot.',
-];
+function userHasIngredient(ing: string, userIngredients: string[]) {
+  const n = normalise(ing);
+  return userIngredients.some(u => {
+    const un = normalise(u);
+    return un.includes(n) || n.includes(un);
+  });
+}
 
-const INGREDIENTS_MAP: Record<string, string[]> = {
-  '1': ['200g pasta', '2 garlic cloves', '1 onion', '2 tomatoes', '50g butter', '50g parmesan'],
-  '2': ['200g noodles', '1 onion', '2 garlic cloves', '2 tbsp soy sauce', '1 tsp sesame oil'],
-  '3': ['1 onion', '3 garlic cloves', '2 tomatoes', '2 tbsp curry paste', '400ml coconut milk'],
-  '4': ['3 eggs', '20g butter', '30g cheese', 'Salt & pepper'],
-};
-
-export default function RecipeDetailScreen({ recipe, onBack, onSave }: Props) {
+export default function RecipeDetailScreen({
+  recipe,
+  onBack,
+  isSaved,
+  onToggleSave,
+  userIngredients = [],
+}: Props) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const c = isDark ? Colors.dark : Colors.light;
 
-  const steps = STEPS[recipe.id] ?? DEFAULT_STEPS;
-  const ingredients = INGREDIENTS_MAP[recipe.id] ?? [];
+  const [serves, setServes] = useState(recipe.serves);
+
+  // Scale ingredient amounts when serves changes
+  const scale = serves / recipe.serves;
+  function scaleAmount(amount: string): string {
+    // Extract leading number and scale it
+    const match = amount.match(/^(\d+(?:\.\d+)?)(.*)/);
+    if (!match) return amount;
+    const num = parseFloat(match[1]) * scale;
+    const unit = match[2];
+    const formatted = Number.isInteger(num) ? num.toString() : num.toFixed(1).replace(/\.0$/, '');
+    return `${formatted}${unit}`;
+  }
+
+  const matchedCount = userIngredients.length > 0
+    ? recipe.ingredients.filter(i => userHasIngredient(i.name, userIngredients)).length
+    : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.bg }]}>
@@ -88,8 +74,8 @@ export default function RecipeDetailScreen({ recipe, onBack, onSave }: Props) {
         <Text style={[styles.headerTitle, { color: c.text }]} numberOfLines={1}>
           {recipe.name}
         </Text>
-        <TouchableOpacity onPress={onSave} style={styles.saveBtn}>
-          <Text style={{ fontSize: 20 }}>🔖</Text>
+        <TouchableOpacity onPress={onToggleSave} style={styles.saveBtn}>
+          <Text style={{ fontSize: 22 }}>{isSaved ? '🔖' : '🏷️'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -105,9 +91,31 @@ export default function RecipeDetailScreen({ recipe, onBack, onSave }: Props) {
             <View style={styles.metaPill}>
               <Text style={styles.metaText}>📊 {recipe.difficulty}</Text>
             </View>
-            <View style={[styles.metaPill, { backgroundColor: Colors.crumb }]}>
-              <Text style={styles.metaText}>{recipe.match}% match</Text>
-            </View>
+            {matchedCount !== null && (
+              <View style={[styles.metaPill, { backgroundColor: Colors.crumb }]}>
+                <Text style={styles.metaText}>✓ {matchedCount}/{recipe.ingredients.length} ingredients</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Serves selector */}
+        <View style={[styles.servesRow, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.servesLabel, { color: c.text }]}>Serves</Text>
+          <View style={styles.servesControls}>
+            <TouchableOpacity
+              onPress={() => setServes(s => Math.max(1, s - 1))}
+              style={[styles.servesBtn, { borderColor: c.border }]}
+            >
+              <Text style={[styles.servesBtnText, { color: c.text }]}>−</Text>
+            </TouchableOpacity>
+            <Text style={[styles.servesCount, { color: c.text }]}>{serves}</Text>
+            <TouchableOpacity
+              onPress={() => setServes(s => Math.min(12, s + 1))}
+              style={[styles.servesBtn, { borderColor: c.border }]}
+            >
+              <Text style={[styles.servesBtnText, { color: c.text }]}>+</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -115,25 +123,35 @@ export default function RecipeDetailScreen({ recipe, onBack, onSave }: Props) {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: c.text }]}>Ingredients</Text>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
-            {ingredients.map((ing, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.ingRow,
-                  i < ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border },
-                ]}
-              >
-                <Text style={styles.ingDot}>•</Text>
-                <Text style={[styles.ingText, { color: c.text }]}>{ing}</Text>
-              </View>
-            ))}
+            {recipe.ingredients.map((ing, i) => {
+              const hasIt = userIngredients.length > 0 && userHasIngredient(ing.name, userIngredients);
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.ingRow,
+                    i < recipe.ingredients.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.border },
+                  ]}
+                >
+                  <Text style={[styles.ingDot, hasIt && { color: '#4CAF50' }]}>
+                    {hasIt ? '✓' : '•'}
+                  </Text>
+                  <Text style={[styles.ingText, { color: c.text }]}>
+                    {scaleAmount(ing.amount)}
+                  </Text>
+                  {!hasIt && userIngredients.length > 0 && (
+                    <Text style={[styles.ingMissing, { color: c.text3 }]}>missing</Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         </View>
 
         {/* Steps */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: c.text }]}>Method</Text>
-          {steps.map((step, i) => (
+          {recipe.steps.map((step, i) => (
             <View key={i} style={styles.stepRow}>
               <View style={[styles.stepNum, { backgroundColor: Colors.crumb }]}>
                 <Text style={styles.stepNumText}>{i + 1}</Text>
@@ -179,13 +197,44 @@ const styles = StyleSheet.create({
   },
   metaText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
+  servesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginTop: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  servesLabel: { fontSize: 15, fontWeight: '600' },
+  servesControls: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  servesBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  servesBtnText: { fontSize: 18, fontWeight: '400', marginTop: -1 },
+  servesCount: { fontSize: 18, fontWeight: '700', minWidth: 24, textAlign: 'center' },
+
   section: { padding: 20, paddingBottom: 4 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 12 },
 
   card: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  ingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  ingDot: { color: Colors.crumb, fontSize: 16 },
-  ingText: { fontSize: 15 },
+  ingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  ingDot: { color: Colors.crumb, fontSize: 16, width: 16 },
+  ingText: { flex: 1, fontSize: 15 },
+  ingMissing: { fontSize: 11, fontStyle: 'italic' },
 
   stepRow: { flexDirection: 'row', gap: 14, marginBottom: 16, alignItems: 'flex-start' },
   stepNum: {

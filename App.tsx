@@ -10,19 +10,21 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './src/screens/AuthScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import IngredientsScreen from './src/screens/IngredientsScreen';
-import RecipeDetailScreen, { Recipe } from './src/screens/RecipeDetailScreen';
+import RecipeDetailScreen from './src/screens/RecipeDetailScreen';
 import SavedScreen from './src/screens/SavedScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import TabBar, { TabName } from './src/components/TabBar';
 import Header from './src/components/Header';
 import { Colors, Radius } from './src/constants';
+import { Recipe } from './src/data/recipes';
+import { useSavedRecipes } from './src/hooks/useSavedRecipes';
 
 type AppScreen =
   | 'auth'
@@ -32,6 +34,9 @@ type AppScreen =
   | 'ingredients'
   | 'recipe';
 
+// Where did we come from before 'ingredients'? Determines back behaviour.
+type IngredientsSource = 'camera' | 'type';
+
 export default function App() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -40,34 +45,27 @@ export default function App() {
   const [screen, setScreen] = useState<AppScreen>('auth');
   const [tab, setTab] = useState<TabName>('home');
   const [foundIngredients, setFoundIngredients] = useState<string[]>([]);
+  const [ingredientsSource, setIngredientsSource] = useState<IngredientsSource>('camera');
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [recipeIngredients, setRecipeIngredients] = useState<string[]>([]);
   const [typeModalVisible, setTypeModalVisible] = useState(false);
   const [typeInput, setTypeInput] = useState('');
 
-  function signIn() {
-    setScreen('onboarding');
-  }
+  const { savedIds, isSaved, toggleSave } = useSavedRecipes();
 
-  function finishOnboarding() {
-    setScreen('app');
-  }
-
-  function openCamera() {
-    setScreen('camera');
-  }
+  function signIn() { setScreen('onboarding'); }
+  function finishOnboarding() { setScreen('app'); }
+  function openCamera() { setScreen('camera'); }
 
   function handleIngredientsFound(ingredients: string[]) {
     setFoundIngredients(ingredients);
+    setIngredientsSource('camera');
     setScreen('ingredients');
   }
 
-  function handleFindRecipes() {
-    setTab('home');
-    setScreen('app');
-  }
-
-  function openRecipe(recipe: Recipe) {
+  function openRecipe(recipe: Recipe, userIngredients: string[] = []) {
     setSelectedRecipe(recipe);
+    setRecipeIngredients(userIngredients);
     setScreen('recipe');
   }
 
@@ -84,6 +82,7 @@ export default function App() {
     if (parsed.length === 0) return;
     setTypeModalVisible(false);
     setFoundIngredients(parsed);
+    setIngredientsSource('type');
     setScreen('ingredients');
   }
 
@@ -97,7 +96,8 @@ export default function App() {
     setTab('home');
   }
 
-  // Full-screen flows (no tab bar)
+  // ── Full-screen flows ──────────────────────────────────────────────────────
+
   if (screen === 'auth') {
     return (
       <SafeAreaProvider>
@@ -130,8 +130,8 @@ export default function App() {
       <SafeAreaProvider>
         <IngredientsScreen
           ingredients={foundIngredients}
-          onBack={() => setScreen('camera')}
-          onFindRecipes={handleFindRecipes}
+          onBack={() => setScreen(ingredientsSource === 'camera' ? 'camera' : 'app')}
+          onOpenRecipe={openRecipe}
         />
       </SafeAreaProvider>
     );
@@ -143,13 +143,16 @@ export default function App() {
         <RecipeDetailScreen
           recipe={selectedRecipe}
           onBack={() => setScreen('app')}
-          onSave={() => {}}
+          isSaved={isSaved(selectedRecipe.id)}
+          onToggleSave={() => toggleSave(selectedRecipe.id)}
+          userIngredients={recipeIngredients}
         />
       </SafeAreaProvider>
     );
   }
 
-  // Main tab app
+  // ── Main tab app ───────────────────────────────────────────────────────────
+
   const TAB_TITLES: Record<TabName, string> = {
     home: 'crumb',
     saved: 'Saved',
@@ -164,12 +167,18 @@ export default function App() {
           {tab === 'home' && (
             <HomeScreen
               onOpenCamera={openCamera}
-              onOpenRecipe={openRecipe}
+              onOpenRecipe={recipe => openRecipe(recipe)}
               onOpenType={openType}
               onOpenSaved={openSavedTab}
+              savedIds={savedIds}
             />
           )}
-          {tab === 'saved' && <SavedScreen />}
+          {tab === 'saved' && (
+            <SavedScreen
+              savedIds={savedIds}
+              onOpenRecipe={recipe => openRecipe(recipe)}
+            />
+          )}
           {tab === 'profile' && <ProfileScreen onSignOut={signOut} />}
         </View>
         <TabBar active={tab} onPress={setTab} />
